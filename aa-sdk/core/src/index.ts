@@ -97,6 +97,7 @@ export { LogLevel, Logger } from "./logger.js";
 export { middlewareActions } from "./middleware/actions.js";
 export { default7702UserOpSigner } from "./middleware/defaults/7702signer.js";
 export { default7702GasEstimator } from "./middleware/defaults/7702gasEstimator.js";
+export { webauthnGasEstimator } from "./middleware/defaults/webauthnGasEstimator.js";
 export { defaultFeeEstimator } from "./middleware/defaults/feeEstimator.js";
 export { defaultGasEstimator } from "./middleware/defaults/gasEstimator.js";
 export { defaultPaymasterAndData } from "./middleware/defaults/paymasterAndData.js";
@@ -150,3 +151,4 @@ export {
   takeBytes,
   toRecord,
 } from "./utils/index.js";
+export { getUserOperationError } from "./actions/smartAccount/getUserOperationError.js";
