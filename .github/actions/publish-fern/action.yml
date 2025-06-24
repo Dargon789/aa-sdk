@@ -29,6 +29,8 @@ runs:
   steps:
     - name: Setup pnpm
       uses: ./.github/actions/setup-docs-pnpm
+    - name: Upgrade Fern CLI
+      run: pnpm add -g fern-api@latest
 
     - name: Run Generate
       shell: bash
