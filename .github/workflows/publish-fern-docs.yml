@@ -27,5 +27,5 @@ jobs:
           environment: docs-production
           ref: ${{ github.ref }}
       - name: Upgrade Fern CLI
-        shell: bash
         run: pnpm add -g fern-api@latest
+        shell: bash
