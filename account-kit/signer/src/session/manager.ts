@@ -24,7 +24,7 @@ export const DEFAULT_SESSION_MS = 15 * 60 * 1000; // 15 minutes
 // Encryption key for local session storage.
 // In production: obtain this from secure config, NOT hardcoded!
 // IMPORTANT: Set this key securely through environment/config, not hardcoded.
-const SESSION_ENCRYPTION_KEY = process.env.SESSION_ENCRYPTION_KEY;
+const {SESSION_ENCRYPTION_KEY} = process.env;
 
 function encryptSession(sessionObj: object, keyParam?: string) {
   if (!keyParam && !SESSION_ENCRYPTION_KEY) {
