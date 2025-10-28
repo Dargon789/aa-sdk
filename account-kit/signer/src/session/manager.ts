@@ -1,4 +1,5 @@
 import EventEmitter from "eventemitter3";
+import * as CryptoJS from "crypto-js"; // Add crypto library for encryption
 import { z } from "zod";
 import {
   createJSONStorage,
@@ -15,8 +16,28 @@ import type {
 import { assertNever } from "../utils/typeAssertions.js";
 import type { Session, SessionManagerEvents } from "./types";
 
+
 export const DEFAULT_SESSION_MS = 15 * 60 * 1000; // 15 minutes
 
+// Encryption key for local session storage.
+// In production: obtain this from secure config, NOT hardcoded!
+const SESSION_ENCRYPTION_KEY = "__REPLACE_ME_WITH_SECURE_KEY_OR_DERIVATION__";
+
+function encryptSession(sessionObj: object) {
+  const plaintext = JSON.stringify(sessionObj);
+  return CryptoJS.AES.encrypt(plaintext, SESSION_ENCRYPTION_KEY).toString();
+}
+
+function decryptSession(cipherText: string): any | null {
+  try {
+    const bytes = CryptoJS.AES.decrypt(cipherText, SESSION_ENCRYPTION_KEY);
+    const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+    return JSON.parse(decrypted);
+  } catch (e) {
+    console.warn("Failed to decrypt session from localStorage", e);
+    return null;
+  }
+}
 export const SessionManagerParamsSchema = z.object({
   sessionKey: z.string().default("alchemy-signer-session"),
   storage: z
@@ -156,22 +177,23 @@ export class SessionManager {
   };
 
   public setTemporarySession = (session: TemporarySession) => {
-    // temporary session must be placed in localStorage so that it can be accessed across tabs
+    // Encrypt session before storage in localStorage for security
+    const encrypted = encryptSession(session);
     localStorage.setItem(
       `${this.sessionKey}:temporary`,
-      JSON.stringify(session),
+      encrypted,
     );
   };
 
   public getTemporarySession = (): TemporarySession | null => {
-    // temporary session must be placed in localStorage so that it can be accessed across tabs
-    const sessionStr = localStorage.getItem(`${this.sessionKey}:temporary`);
+    // Decrypt session from storage before returning
+    const cipherText = localStorage.getItem(`${this.sessionKey}:temporary`);
 
-    if (!sessionStr) {
+    if (!cipherText) {
       return null;
     }
 
-    return JSON.parse(sessionStr);
+    return decryptSession(cipherText);
   };
 
   on = <E extends keyof SessionManagerEvents>(
