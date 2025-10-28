@@ -38,7 +38,7 @@ function encryptSession(sessionObj: object, keyParam?: string) {
   const key = PBKDF2(keyInput, salt, { keySize: 256 / 32, iterations: 200_000 });
   const encrypted = CryptoJS.AES.encrypt(plaintext, key).toString();
   // Store salt (hex) and ciphertext together as "salt:ciphertext"
-  return salt.toString(encHex) + ':' + encrypted;
+  return salt.toString(CryptoJS.enc.Hex) + ':' + encrypted;
 }
 
 function decryptSession(data: string, keyParam?: string): any | null {
