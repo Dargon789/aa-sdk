@@ -23,26 +23,35 @@ export const DEFAULT_SESSION_MS = 15 * 60 * 1000; // 15 minutes
 
 // Encryption key for local session storage.
 // In production: obtain this from secure config, NOT hardcoded!
-const SESSION_ENCRYPTION_KEY = "__REPLACE_ME_WITH_SECURE_KEY_OR_DERIVATION__";
+// IMPORTANT: Set this key securely through environment/config, not hardcoded.
+const SESSION_ENCRYPTION_KEY = process.env.SESSION_ENCRYPTION_KEY;
 
-function encryptSession(sessionObj: object) {
+function encryptSession(sessionObj: object, keyParam?: string) {
+  if (!keyParam && !SESSION_ENCRYPTION_KEY) {
+    throw new Error("SESSION_ENCRYPTION_KEY must be set!");
+  }
+  const keyInput = keyParam ?? SESSION_ENCRYPTION_KEY;
   // Use a random salt for each session
   const plaintext = JSON.stringify(sessionObj);
   const salt = CryptoJS.lib.WordArray.random(16);
   // Derive a key from the password using PBKDF2 with sufficient iterations
-  const key = PBKDF2(SESSION_ENCRYPTION_KEY, salt, { keySize: 256 / 32, iterations: 100_000 });
+  const key = PBKDF2(keyInput, salt, { keySize: 256 / 32, iterations: 200_000 });
   const encrypted = CryptoJS.AES.encrypt(plaintext, key).toString();
   // Store salt (hex) and ciphertext together as "salt:ciphertext"
   return salt.toString(encHex) + ':' + encrypted;
 }
 
-function decryptSession(data: string): any | null {
+function decryptSession(data: string, keyParam?: string): any | null {
   try {
+    if (!keyParam && !SESSION_ENCRYPTION_KEY) {
+      throw new Error("SESSION_ENCRYPTION_KEY must be set!");
+    }
+    const keyInput = keyParam ?? SESSION_ENCRYPTION_KEY;
     // Expect format "salt:ciphertext"
     const [saltHex, encrypted] = data.split(":");
     if (!saltHex || !encrypted) throw new Error("Invalid encrypted session format");
     const salt = CryptoJS.enc.Hex.parse(saltHex);
-    const key = PBKDF2(SESSION_ENCRYPTION_KEY, salt, { keySize: 256 / 32, iterations: 100_000 });
+    const key = PBKDF2(keyInput, salt, { keySize: 256 / 32, iterations: 200_000 });
     const bytes = CryptoJS.AES.decrypt(encrypted, key);
     const decrypted = bytes.toString(CryptoJS.enc.Utf8);
     return JSON.parse(decrypted);
@@ -191,7 +200,7 @@ export class SessionManager {
 
   public setTemporarySession = (session: TemporarySession) => {
     // Encrypt session before storage in localStorage for security
-    const encrypted = encryptSession(session);
+    const encrypted = encryptSession(session, SESSION_ENCRYPTION_KEY);
     localStorage.setItem(
       `${this.sessionKey}:temporary`,
       encrypted,
@@ -206,7 +215,7 @@ export class SessionManager {
       return null;
     }
 
-    return decryptSession(cipherText);
+    return decryptSession(cipherText, SESSION_ENCRYPTION_KEY);
   };
 
   on = <E extends keyof SessionManagerEvents>(
