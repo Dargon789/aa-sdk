@@ -9,8 +9,8 @@
 		"web": "expo start --web"
 	},
 	"dependencies": {
-		"@account-kit/infra": "4.17.0",
-		"@account-kit/react": "4.17.0",
+		"@account-kit/infra": "4.35.1",
+		"@account-kit/react": "4.35.1",
 		"@account-kit/react-native": "4.17.0",
 		"@account-kit/react-native-signer": "4.17.0",
 		"@account-kit/signer": "4.62.0",
