@@ -3,12 +3,14 @@ import type { InnerWalletApiClient } from "../../types.js";
 import { prepareCalls, type PrepareCallsParams } from "./prepareCalls.js";
 import { metrics } from "../../metrics.js";
 import { signPreparedCalls } from "./signPreparedCalls.js";
-import { type SmartAccountSigner } from "@aa-sdk/core";
 import {
   sendPreparedCalls,
   type SendPreparedCallsResult,
 } from "./sendPreparedCalls.js";
 import { signSignatureRequest } from "./signSignatureRequest.js";
+import type { SmartWalletSigner } from "../index.js";
+import { isWebAuthnSigner } from "../../utils.js";
+import { extractCapabilitiesForSending } from "../../internal/capabilities.js";
 
 export type SendCallsParams<
   TAccount extends Address | undefined = Address | undefined,
@@ -25,11 +27,11 @@ export type SendCallsResult = SendPreparedCallsResult;
  * </Note>
  *
  * @param {InnerWalletApiClient} client - The wallet API client to use for the request
- * @param {SmartAccountSigner} signer - The signer to use
+ * @param {SmartAccountSigner | WebAuthnSigner} signer - The signer to use
  * @param {PrepareCallsParams<TAccount>} params - Parameters for sending calls
  * @param {Array<{to: Address, data?: Hex, value?: Hex}>} params.calls - Array of contract calls to execute
  * @param {Address} [params.from] - The address to execute the calls from (required if the client wasn't initialized with an account)
- * @param {object} [params.capabilities] - Optional capabilities to include with the request.
+ * @param {object} [params.capabilities] - Optional capabilities to include with the request. See [API documentation](/wallets/api-reference/smart-wallets/wallet-api-endpoints/wallet-api-endpoints/wallet-prepare-calls#request.body.prepareCallsRequest.capabilities) for details.
  * @returns {Promise<SendPreparedCallsResult>} A Promise that resolves to the result containing the prepared call IDs.
  *
  *  @example
@@ -53,7 +55,7 @@ export async function sendCalls<
   TAccount extends Address | undefined = Address | undefined,
 >(
   client: InnerWalletApiClient,
-  signer: SmartAccountSigner,
+  signer: SmartWalletSigner,
   params: SendCallsParams<TAccount>,
 ): Promise<SendCallsResult> {
   metrics.trackEvent({
@@ -63,6 +65,11 @@ export async function sendCalls<
   let calls = await prepareCalls(client, params);
 
   if (calls.type === "paymaster-permit") {
+    if (isWebAuthnSigner(signer)) {
+      throw new Error(
+        "WebAuthn signer is not currently supported for signing paymaster permit signatures",
+      );
+    }
     const signature = await signSignatureRequest(
       signer,
       calls.signatureRequest,
@@ -80,11 +87,10 @@ export async function sendCalls<
 
   const signedCalls = await signPreparedCalls(signer, calls);
 
+  const capabilities = extractCapabilitiesForSending(params.capabilities);
+
   return await sendPreparedCalls(client, {
     ...signedCalls,
-    // The only capability that is supported in sendPreparedCalls is permissions.
-    ...(params.capabilities?.permissions != null
-      ? { capabilities: { permissions: params.capabilities.permissions } }
-      : {}),
+    ...(capabilities != null ? { capabilities } : {}),
   });
 }
