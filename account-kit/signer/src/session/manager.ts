@@ -1,4 +1,7 @@
 import EventEmitter from "eventemitter3";
+import * as CryptoJS from "crypto-js"; // Add crypto library for encryption
+import PBKDF2 from "crypto-js/pbkdf2";
+import encHex from "crypto-js/enc-hex";
 import { z } from "zod";
 import {
   createJSONStorage,
@@ -15,8 +18,48 @@ import type {
 import { assertNever } from "../utils/typeAssertions.js";
 import type { Session, SessionManagerEvents } from "./types";
 
+
 export const DEFAULT_SESSION_MS = 15 * 60 * 1000; // 15 minutes
 
+// Encryption key for local session storage.
+// In production: obtain this from secure config, NOT hardcoded!
+// IMPORTANT: Set this key securely through environment/config, not hardcoded.
+const {SESSION_ENCRYPTION_KEY} = process.env;
+
+function encryptSession(sessionObj: object, keyParam?: string) {
+  if (!keyParam && !SESSION_ENCRYPTION_KEY) {
+    throw new Error("SESSION_ENCRYPTION_KEY must be set!");
+  }
+  const keyInput = keyParam ?? SESSION_ENCRYPTION_KEY;
+  // Use a random salt for each session
+  const plaintext = JSON.stringify(sessionObj);
+  const salt = CryptoJS.lib.WordArray.random(16);
+  // Derive a key from the password using PBKDF2 with sufficient iterations
+  const key = PBKDF2(keyInput, salt, { keySize: 256 / 32, iterations: 200_000 });
+  const encrypted = CryptoJS.AES.encrypt(plaintext, key).toString();
+  // Store salt (hex) and ciphertext together as "salt:ciphertext"
+  return salt.toString(CryptoJS.enc.Hex) + ':' + encrypted;
+}
+
+function decryptSession(data: string, keyParam?: string): any | null {
+  try {
+    if (!keyParam && !SESSION_ENCRYPTION_KEY) {
+      throw new Error("SESSION_ENCRYPTION_KEY must be set!");
+    }
+    const keyInput = keyParam ?? SESSION_ENCRYPTION_KEY;
+    // Expect format "salt:ciphertext"
+    const [saltHex, encrypted] = data.split(":");
+    if (!saltHex || !encrypted) throw new Error("Invalid encrypted session format");
+    const salt = CryptoJS.enc.Hex.parse(saltHex);
+    const key = PBKDF2(keyInput, salt, { keySize: 256 / 32, iterations: 200_000 });
+    const bytes = CryptoJS.AES.decrypt(encrypted, key);
+    const decrypted = bytes.toString(CryptoJS.enc.Utf8);
+    return JSON.parse(decrypted);
+  } catch (e) {
+    console.warn("Failed to decrypt session from localStorage", e);
+    return null;
+  }
+}
 export const SessionManagerParamsSchema = z.object({
   sessionKey: z.string().default("alchemy-signer-session"),
   storage: z
@@ -156,22 +199,23 @@ export class SessionManager {
   };
 
   public setTemporarySession = (session: TemporarySession) => {
-    // temporary session must be placed in localStorage so that it can be accessed across tabs
+    // Encrypt session before storage in localStorage for security
+    const encrypted = encryptSession(session, SESSION_ENCRYPTION_KEY);
     localStorage.setItem(
       `${this.sessionKey}:temporary`,
-      JSON.stringify(session),
+      encrypted,
     );
   };
 
   public getTemporarySession = (): TemporarySession | null => {
-    // temporary session must be placed in localStorage so that it can be accessed across tabs
-    const sessionStr = localStorage.getItem(`${this.sessionKey}:temporary`);
+    // Decrypt session from storage before returning
+    const cipherText = localStorage.getItem(`${this.sessionKey}:temporary`);
 
-    if (!sessionStr) {
+    if (!cipherText) {
       return null;
     }
 
-    return JSON.parse(sessionStr);
+    return decryptSession(cipherText, SESSION_ENCRYPTION_KEY);
   };
 
   on = <E extends keyof SessionManagerEvents>(
